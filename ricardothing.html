@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Ricardo Trade Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=IM+Fell+English:ital@0;1&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --board:#1d140d; --wood:#3b2716; --frame:#6b4a24; --gold:#d4ad52; --gold2:#a9822f;
+  --parch:#f0e4c6; --parch2:#e6d5ad; --ink:#2a1d12; --muted:#6e5a44; --line:#b99c68;
+  --eng:#c8232c; --por:#1f56b8; --sea1:#1f5f7a; --sea2:#143f55;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:radial-gradient(ellipse at top,#3b2716 0%,#1d140d 70%) fixed,#1d140d;color:var(--ink);font-family:Spectral,Georgia,"Times New Roman",serif;font-size:17px;line-height:1.55;padding:10px 0 env(safe-area-inset-bottom,0px)}
+h1,h2,h3{font-family:Cinzel,"IM Fell English",Georgia,serif;font-weight:800;line-height:1.15;margin:0;letter-spacing:.03em}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* ---------- Board ---------- */
+#stage{position:relative;overflow:hidden;max-width:1080px;margin:0 auto;background:radial-gradient(ellipse at 40% 40%,var(--sea1),var(--sea2));border:7px solid var(--frame);outline:2px solid var(--gold);outline-offset:-11px;box-shadow:0 0 0 2px #120c07,0 10px 30px rgba(0,0,0,.6)}
+@media (max-width:600px){#stage{border-width:4px;outline-offset:-7px}}
+#plate{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:2px 12px;align-items:baseline;background:linear-gradient(180deg,#2b1d11,#1d140d);color:var(--parch);border:1.5px solid var(--gold);margin:14px 14px 0;padding:6px 12px;font-size:14px;line-height:1.35;max-width:660px}
+#plate b{font-family:Cinzel,Georgia,serif;font-weight:800;font-size:16px;color:var(--gold);letter-spacing:.06em;text-transform:uppercase}
+#plate .tbl{color:#d9c9a4}
+#map{display:block;width:100%;height:auto}
+.hex{stroke:#22180f;stroke-width:1.5;transition:filter .6s}
+.ring{fill:none;stroke-width:0;transition:stroke .6s}
+.ring.E{stroke:var(--eng);stroke-width:3.4}
+.ring.P{stroke:var(--por);stroke-width:3.4}
+.hex.new{animation:flash 1.2s ease-out 2}
+@keyframes flash{0%{filter:brightness(1.6) drop-shadow(0 0 6px #ffd76a)}100%{filter:none}}
+.lbl{font-family:Spectral,Georgia,serif;font-weight:600;font-size:8.4px;text-anchor:middle;fill:#21170e;paint-order:stroke;stroke:rgba(255,246,222,.75);stroke-width:2.2px;pointer-events:none}
+.army{transition:opacity .4s}
+.army circle.d{stroke:#fff;stroke-width:1.8}
+.army.E circle.d{fill:var(--eng)} .army.P circle.d{fill:var(--por)}
+.army circle.capr{fill:none;stroke:var(--gold);stroke-width:2.4}
+.army text{font-family:Cinzel,Georgia,serif;font-weight:800;font-size:11px;fill:#fff;text-anchor:middle;pointer-events:none}
+.army.N{opacity:0}
+.sea-lbl{font-family:Cinzel,Georgia,serif;font-weight:600;letter-spacing:.18em;font-size:8px;fill:rgba(255,255,255,.4)}
+@media (max-width:560px){.lbl{display:none}.sea-lbl{display:none}}
+#legend{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center;padding:4px 12px 10px;font-size:12px;color:#e8dcbc}
+#legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+#legend i{width:12px;height:12px;border:1px solid #120c07;display:inline-block}
+
+#victory{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%) scale(.6);opacity:0;text-align:center;pointer-events:none;transition:opacity .6s,transform .8s cubic-bezier(.3,1.5,.5,1);z-index:2;width:92%}
+#victory.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#victory b{display:block;font-family:Cinzel,Georgia,serif;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:clamp(30px,7.5vw,78px);line-height:1;color:#f3cf6a;text-shadow:0 3px 0 #5a3c0c,0 0 24px rgba(0,0,0,.7)}
+#victory span{display:inline-block;margin-top:10px;background:#1d140d;color:var(--parch);border:1.5px solid var(--gold);padding:2px 12px;font-size:clamp(13px,2.4vw,18px)}
+
+/* Ricardo */
+#ricardo{position:absolute;right:-1%;bottom:0;height:min(72%,380px);display:flex;align-items:flex-end;pointer-events:none;transform:translateX(115%) rotate(0deg);transform-origin:100% 100%;transition:transform .7s cubic-bezier(.3,1.4,.5,1);z-index:3}
+#ricardo.show{transform:translateX(0) rotate(-7deg)}
+#ricardo svg{height:100%;width:auto;display:block}
+#bubble{position:absolute;right:92%;top:4%;width:min(56vw,320px);background:#fffaf0;color:#1f1d24;border:2px solid #1f1d24;border-radius:16px;padding:9px 13px;font-family:"IM Fell English",Georgia,serif;font-size:clamp(14px,2.2vw,19px);line-height:1.3;transform:rotate(7deg);box-shadow:3px 3px 0 #1f1d24;transition:opacity .2s}
+#bubble::after{content:"";position:absolute;right:-14px;bottom:18px;border:10px solid transparent;border-left:16px solid #1f1d24}
+#bubble small{display:block;font-family:Spectral,Georgia,serif;font-size:12px;color:#6a6572;margin-top:3px}
+#ricardo:not(.show) #bubble{opacity:0;visibility:hidden}
+@media (max-width:600px){#ricardo{height:58%}#bubble{right:62%;top:-4%;width:min(62vw,240px)}}
+
+/* ---------- Army trays ---------- */
+#bar{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end;max-width:1080px;margin:0 auto;padding:30px 0 10px}
+@media (max-width:1100px){#bar{padding-left:10px;padding-right:10px}}
+.pcard{position:relative;display:flex;gap:10px;align-items:center;background:linear-gradient(180deg,#2e2014,#1d140d);color:var(--parch);border:1.5px solid var(--line);border-left:8px solid var(--eng);padding:8px 10px;min-width:0}
+.pcard.P{flex-direction:row-reverse;text-align:right;border-left:1.5px solid var(--line);border-right:8px solid var(--por)}
+.pcard svg{width:46px;height:46px;flex:none}
+.pcard .nm{font-family:Cinzel,Georgia,serif;font-weight:800;font-size:18px;line-height:1;text-transform:uppercase;letter-spacing:.05em}
+.pcard.E .nm{color:#ff6b62} .pcard.P .nm{color:#7ea9ff}
+.pcard .st{font-size:13px;color:#bfae8c;line-height:1.3}
+.pcard .lands{font-size:14px}
+.pcard .lands b{font-family:Cinzel,Georgia,serif;font-size:18px;color:var(--gold)}
+.pcard.act{border-color:var(--gold);animation:glow 1.4s ease-in-out infinite alternate}
+@keyframes glow{from{box-shadow:0 0 0 2px rgba(255,200,80,.3),0 0 10px rgba(255,190,60,.4)}to{box-shadow:0 0 0 4px rgba(255,200,80,.5),0 0 22px rgba(255,190,60,.75)}}
+.you{position:absolute;top:-24px;left:50%;transform:translateX(-50%);font-family:Cinzel,Georgia,serif;font-size:12px;font-weight:800;letter-spacing:.06em;background:var(--gold);color:#1d140d;padding:0 8px;white-space:nowrap}
+.world{text-align:center;font-size:12px;color:#d9c9a4;width:130px;font-family:Cinzel,Georgia,serif;letter-spacing:.04em}
+.world .bar{height:8px;background:#3b2716;border:1px solid var(--gold2);margin-top:3px}
+.world .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--eng),var(--gold),var(--por));transition:width 1s}
+.world small{font-family:Spectral,Georgia,serif;letter-spacing:0}
+@media (max-width:600px){
+  #bar{grid-template-columns:1fr 1fr;gap:8px}
+  .world{grid-column:1/3;grid-row:2;width:auto}
+  .pcard svg{width:34px;height:34px}
+  .pcard .nm{font-size:15px}
+}
+
+/* ---------- Orders card ---------- */
+#card{padding:6px 10px 30px}
+.wrap{max-width:740px;margin:0 auto;background:linear-gradient(180deg,var(--parch),var(--parch2));border:2px solid var(--gold2);outline:1px solid #120c07;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:18px 20px 22px}
+@media (max-width:600px){.wrap{padding:14px 14px 18px}}
+.kicker{font-family:Cinzel,Georgia,serif;font-weight:600;font-size:13px;color:var(--muted);margin:0 0 4px;letter-spacing:.08em;text-transform:uppercase}
+h2{font-size:clamp(22px,4.6vw,30px);margin-bottom:12px;text-transform:uppercase;color:#3a2412}
+.lesson{background:rgba(255,250,236,.6);border:1px solid var(--line);border-left:5px solid var(--gold2);padding:12px 14px;margin:0 0 16px}
+.lesson h3{font-size:16px;margin-bottom:6px;text-transform:uppercase;color:#5a3a1a}
+.lesson p{margin:0 0 6px}
+.quote{font-family:"IM Fell English",Georgia,serif;font-size:18px;font-style:italic;margin:8px 0 0}
+.cite{font-size:13px;color:var(--muted)}
+.problem{background:#fffaf0;border:1.5px solid var(--ink);padding:12px 14px;margin:0 0 12px;position:relative}
+.problem::before{content:"Orders";position:absolute;top:-11px;left:12px;background:var(--ink);color:var(--parch);font-family:Cinzel,Georgia,serif;font-weight:800;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:1px 8px}
+table.lab{border-collapse:collapse;margin:8px 0 10px;font-size:15px}
+table.lab th,table.lab td{border:1px solid var(--line);padding:4px 12px;text-align:center}
+table.lab th{font-weight:600;background:var(--parch2)}
+.ans{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
+input.num{font:inherit;font-size:20px;width:8em;padding:8px 10px;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+.choices{display:grid;gap:10px;margin-top:6px}
+.choice{text-align:left;border:1.5px solid var(--ink);background:var(--parch);color:var(--ink);padding:12px 14px;transition:transform .15s,background .15s}
+.choice:hover:not(:disabled){transform:translateX(4px);background:#fff}
+.choice.picked{background:var(--ink);color:var(--parch)}
+.choice:disabled{cursor:default}
+.primary{font-family:Cinzel,Georgia,serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:15px;background:linear-gradient(180deg,#d8333b,#9c1820);color:#fff;border:1.5px solid #5a0c10;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 3px 0 #5a0c10;padding:11px 20px}
+.primary:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 1px 0 #5a0c10}
+.primary:disabled{opacity:.5;cursor:default}
+.secondary{font-family:Cinzel,Georgia,serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-size:14px;background:transparent;color:var(--ink);border:1.5px solid var(--ink);padding:10px 16px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:16px}
+.waiting{color:var(--muted);font-style:italic;margin-top:10px}
+.hint{font-size:13px;color:var(--muted)}
+.err{color:#a3121a;font-weight:600}
+.results{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.res{background:#fffaf0;border:1.5px solid var(--ink);padding:10px 12px}
+.res.E{border-top:6px solid var(--eng)} .res.P{border-top:6px solid var(--por)}
+.res b{font-family:Cinzel,Georgia,serif;text-transform:uppercase;letter-spacing:.05em}
+.res .big{font-size:20px;font-family:Cinzel,Georgia,serif;font-weight:800;text-transform:uppercase}
+.meter{height:7px;background:var(--parch2);border:1px solid var(--line);margin-top:4px}.meter i{display:block;height:100%;background:var(--gold2)}
+.outcome{background:#2b1d11;color:var(--parch);border:1.5px solid var(--gold);padding:10px 14px;margin:14px 0}
+.outcome b{color:var(--gold)}
+.why{background:rgba(255,250,236,.6);border:1px solid var(--line);border-left:5px solid var(--gold2);padding:12px 14px;font-size:15.5px}
+.why h3{font-size:15px;margin-bottom:4px;text-transform:uppercase;color:#5a3a1a}
+.correct{font-weight:600}
+input.code{font:inherit;font-size:22px;letter-spacing:.3em;text-transform:uppercase;width:8.5em;padding:8px 10px;border:2px solid var(--ink);background:#fff;color:var(--ink)}
+.bigcode{font-family:Cinzel,Georgia,serif;font-weight:800;font-size:48px;letter-spacing:.2em;color:#3a2412}
+ul.rules{padding-left:1.2em;margin:8px 0}
+ul.rules li{margin-bottom:4px}
+footer{font-size:13px;color:#a8977a;text-align:center;padding:0 16px 24px}
+@media (max-width:600px){.results{grid-template-columns:1fr}}
+@media (prefers-reduced-motion: reduce){#ricardo{transition:none}.pcard.act{animation:none}.hex.new{animation:none}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="plate"></div>
+  <svg id="map" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map of trading ports"></svg>
+  <div id="legend"></div>
+  <div id="victory"><b></b><span></span></div>
+  <div id="ricardo" aria-hidden="true"><div id="bubble"></div><svg viewBox="0 0 220 300" xmlns="http://www.w3.org/2000/svg"><path d="M10 300 Q20 190 110 180 Q200 190 215 300Z" fill="#1c1a20"/><path d="M78 186 L110 236 L142 186 Z" fill="#f5f1e6"/><path d="M96 192 q14 10 28 0 l-4 16 q-10 6 -20 0z" fill="#fffdf7" stroke="#cfc6b5"/><rect x="92" y="150" width="36" height="34" fill="#e8c6a6"/><ellipse cx="110" cy="112" rx="50" ry="60" fill="#e8c6a6"/><path d="M58 112 Q50 46 110 42 Q172 46 162 112 Q158 80 136 72 Q112 84 84 74 Q62 84 58 112Z" fill="#3b2a20"/><circle cx="70" cy="62" r="13" fill="#3b2a20"/><circle cx="92" cy="48" r="14" fill="#3b2a20"/><circle cx="118" cy="44" r="14" fill="#3b2a20"/><circle cx="144" cy="52" r="13" fill="#3b2a20"/><circle cx="160" cy="72" r="11" fill="#3b2a20"/><path d="M60 110 q-4 34 8 52 l6 -40z M160 110 q4 34 -8 52 l-6 -40z" fill="#3b2a20"/><path d="M84 102 q10 -6 20 0 M118 102 q10 -6 20 0" stroke="#3b2a20" stroke-width="3" fill="none"/><circle cx="94" cy="112" r="4" fill="#2a2320"/><circle cx="128" cy="112" r="4" fill="#2a2320"/><path d="M110 112 q-8 22 0 28" stroke="#b58a6c" stroke-width="3" fill="none"/><path d="M98 152 q12 6 24 0" stroke="#8a4a3a" stroke-width="3" fill="none"/></svg></div>
+</div>
+<div id="bar"></div>
+<main id="card"><div class="wrap" id="content"></div></main>
+<footer>Spencer Burnfield · History of Economic Thought · Content from Hunt &amp; Lautzenheiser, <i>History of Economic Thought</i>, ch. 5 (a critical reading); Ricardo quotations from his <i>Principles</i> (public domain).</footer>
+
+<script>
+/* ================= CONFIG ================= */
+const SUPABASE_URL = "https://zrjvngswwpgzkezdulxg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_e3c_ZIa_upIi3GYAcEl5OA_LXRCuE3j";
+const SB = window.__MOCK_SB || (window.supabase && window.supabase.createClient ? window.supabase : null);
+const ONLINE_OK = !!(SB && SUPABASE_URL && SUPABASE_ANON_KEY && !/YOUR|PLACEHOLDER|xxxx/i.test(SUPABASE_ANON_KEY));
+const ROUNDS_N = 10;
+const NAME = {E:"England", P:"Portugal"};
+const other = r => r==="E"?"P":"E";
+
+/* ================= RANDOM ================= */
+function hashStr(s){let h=1779033703^s.length;for(let i=0;i<s.length;i++){h=Math.imul(h^s.charCodeAt(i),3432918353);h=h<<13|h>>>19}return h>>>0}
+function rng(seed){let a=hashStr(String(seed));return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const pick=(r,arr)=>arr[Math.floor(r()*arr.length)];
+const randStep=(r,lo,hi,step)=>lo+step*Math.floor(r()*((hi-lo)/step+1));
+const f2=x=>(Math.round(x*100)/100).toString();
+
+/* ================= MAP ================= */
+const MAP_ROWS=[
+ ["Halifax","Boston","~","~","Liverpool:E","London:E*","Antwerp","Hamburg","Riga"],
+ ["New York","Charleston","~","Azores","Bristol:E","Bordeaux","Genoa","Trieste","~"],
+ ["Veracruz","Havana","Kingston","Madeira:P","Porto:P","Cádiz","Naples","Smyrna","~"],
+ ["~","Barbados","Cayenne","Canaries","Lisbon:P*","Gibraltar","Algiers","Alexandria","Bombay"],
+ ["Santos","Rio","Bahia","Cape Verde","Lagos","Luanda","Cape Town","Mauritius","Calcutta"]
+];
+const CONT=[
+ {n:"North America",c:"#d8b24a",m:["Halifax","Boston","New York","Charleston"]},
+ {n:"Caribbean",c:"#d98b3e",m:["Veracruz","Havana","Kingston","Barbados","Cayenne"]},
+ {n:"South America",c:"#b5634a",m:["Santos","Rio","Bahia"]},
+ {n:"Europe",c:"#9a93bd",m:["Liverpool","London","Antwerp","Hamburg","Riga","Bristol","Bordeaux","Genoa","Trieste","Porto","Lisbon","Cádiz","Naples","Gibraltar"]},
+ {n:"Atlantic Isles",c:"#a47bab",m:["Azores","Madeira","Canaries","Cape Verde"]},
+ {n:"Africa",c:"#b98d5c",m:["Algiers","Alexandria","Lagos","Luanda","Cape Town"]},
+ {n:"Asia",c:"#7ea457",m:["Smyrna","Bombay","Calcutta","Mauritius"]}];
+const contOf=nm=>CONT.find(k=>k.m.includes(nm));
+const R=34, HW=Math.sqrt(3)*R, VH=1.5*R, PADX=8, PADY=8;
+const CELLS=[]; const AT={};
+MAP_ROWS.forEach((row,r)=>row.forEach((s,c)=>{
+  if(s==="~")return;
+  const [nm,h]=s.split(":"); const home=h?h[0]:null; const cap=!!(h&&h.includes("*"));
+  const x=PADX+HW/2+c*HW+(r%2?HW/2:0), y=PADY+R+r*VH;
+  const cell={id:CELLS.length,name:nm,r,c,x,y,home,cap}; CELLS.push(cell); AT[r+","+c]=cell;
+}));
+function nbrs(cell){const {r,c}=cell;const d=r%2?[[0,-1],[0,1],[-1,0],[-1,1],[1,0],[1,1]]:[[0,-1],[0,1],[-1,-1],[-1,0],[1,-1],[1,0]];
+  return d.map(([dr,dc])=>AT[(r+dr)+","+(c+dc)]).filter(Boolean)}
+CELLS.forEach(c=>c.n=nbrs(c));
+const MAPW=PADX*2+HW*9+HW/2, MAPH=PADY*2+2*R+4*VH;
+function hexPts(x,y){let p=[];for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30);p.push((x+R*Math.cos(a)).toFixed(1)+","+(y+R*Math.sin(a)).toFixed(1))}return p.join(" ")}
+function drawMap(){
+  const svg=document.getElementById("map");
+  svg.setAttribute("viewBox",`0 0 ${MAPW.toFixed(0)} ${MAPH.toFixed(0)}`);
+  const cx=PADX+HW/2+2.5*HW, cy=PADY+R+VH*0.45;
+  let h=`<defs><pattern id="waves" width="26" height="14" patternUnits="userSpaceOnUse"><path d="M0 7 q6.5 -5 13 0 t13 0" stroke="rgba(255,255,255,.10)" stroke-width="1.2" fill="none"/></pattern></defs>
+  <rect x="0" y="0" width="${MAPW.toFixed(0)}" height="${MAPH.toFixed(0)}" fill="url(#waves)"/>
+  <g transform="translate(${cx.toFixed(1)},${cy.toFixed(1)})" opacity=".8"><circle r="24" fill="none" stroke="#e8d7a8" stroke-width="1"/><circle r="17" fill="none" stroke="#e8d7a8" stroke-width=".6" stroke-dasharray="2 2"/>
+   <path d="M0 -30 L5 0 L0 30 L-5 0Z" fill="#e8d7a8"/><path d="M-30 0 L0 5 L30 0 L0 -5Z" fill="#e8d7a8" opacity=".75"/><path d="M0 -30 L5 0 L-5 0Z" fill="#c8232c"/>
+   <text y="-33" text-anchor="middle" font-family="Cinzel,Georgia,serif" font-weight="800" font-size="9" fill="#e8d7a8">N</text></g>
+  <text class="sea-lbl" text-anchor="middle" x="${cx.toFixed(1)}" y="${(PADY+R+VH+16).toFixed(1)}">ATLANTIC</text>`;
+  // continent hexes
+  CELLS.forEach(c=>{
+    const k=contOf(c.name);
+    h+=`<polygon id="hx${c.id}" class="hex" fill="${k?k.c:"#ccc"}" points="${hexPts(c.x,c.y)}"><title>${c.name} (${k?k.n:""})</title></polygon>`;
+  });
+  // owner rings, labels, armies on top
+  CELLS.forEach(c=>{
+    h+=`<polygon id="rg${c.id}" class="ring" points="${hexPtsR(c.x,c.y,R-3.2)}"/>`;
+    h+=`<text id="lb${c.id}" class="lbl" x="${c.x.toFixed(1)}" y="${(c.y+22).toFixed(1)}">${c.name}</text>`;
+    h+=`<g id="ar${c.id}" class="army N" transform="translate(${c.x.toFixed(1)},${(c.y-3).toFixed(1)})">${c.cap?'<circle class="capr" r="14.5"/>':""}<circle class="d" r="11.5"/><text y="4">0</text></g>`;
+  });
+  svg.innerHTML=h;
+  $("legend").innerHTML=CONT.map(k=>`<span><i style="background:${k.c}"></i>${k.n}</span>`).join("")+`<span><i style="border-radius:50%;background:#555;box-shadow:0 0 0 2px #d4ad52"></i>Capital</span><span>Number = turns held</span>`;
+}
+function hexPtsR(x,y,r){let p=[];for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30);p.push((x+r*Math.cos(a)).toFixed(1)+","+(y+r*Math.sin(a)).toFixed(1))}return p.join(" ")}
+
+/* ================= ROUNDS (content from H&L ch. 5) ================= */
+function labTable(t){return `<table class="lab"><tr><th>Hours of labour per unit</th><th>Cloth</th><th>Wine</th></tr><tr><td>England</td><td>${t.E.c}</td><td>${t.E.w}</td></tr><tr><td>Portugal</td><td>${t.P.c}</td><td>${t.P.w}</td></tr></table>`}
+function genTable(r){
+  for(let k=0;k<200;k++){
+    const ac=randStep(r,60,100,5), aw=randStep(r,60,100,5);
+    const bc=ac+randStep(r,10,40,5), bw=aw+randStep(r,10,50,5);
+    const ra=aw/ac, rb=bw/bc;
+    if(Math.abs(ra-rb)/Math.min(ra,rb)<0.15)continue;
+    const better=r()<0.5?"E":"P";
+    const t={}; t[better]={c:ac,w:aw}; t[other(better)]={c:bc,w:bw};
+    return t;
+  }
+  return {E:{c:100,w:120},P:{c:90,w:80}};
+}
+// wine price in cloth at home: w/c. Lower = comparative advantage in wine.
+const wineP=(t,k)=>t[k].w/t[k].c;
+function specs(t){const W=wineP(t,"E")<wineP(t,"P")?"E":"P";return {W,C:other(W)}}
+function absBetter(t){return t.E.c<t.P.c&&t.E.w<t.P.w?"E":(t.P.c<t.E.c&&t.P.w<t.E.w?"P":null)}
+function tableLine(t){return `England ${t.E.c}/${t.E.w} hrs · Portugal ${t.P.c}/${t.P.w} hrs (cloth/wine)`}
+
+function buildRounds(seed){
+  const r=rng(seed);
+  const RIC={E:{c:100,w:120},P:{c:90,w:80}};
+  const t3=genTable(r), t4=genTable(r), t5=genTable(r), t6=genTable(r);
+  const s5=specs(t5), s6=specs(t6);
+  const lo=Math.min(wineP(t6,"E"),wineP(t6,"P")), hi=Math.max(wineP(t6,"E"),wineP(t6,"P"));
+  const T=Math.round(((lo+hi)/2)*100)/100;
+  const W=s6.W, C=s6.C;
+  const gainW=(t6[W].c/t6[W].w)*T, gainC=(t6[C].w/t6[C].c)/T;
+  const y1=randStep(r,90,120,2), y2=y1-randStep(r,6,14,2), y3=y2-randStep(r,6,14,2);
+  const opts5=[
+    {t:`England makes cloth, Portugal makes wine`, k:"Ec"},
+    {t:`England makes wine, Portugal makes cloth`, k:"Ew"},
+    {t:`The more efficient country makes both; no trade`, k:"no"},
+    {t:`Each country makes half cloth, half wine`, k:"half"}];
+  const c5=s5.C==="E"?"Ec":"Ew";
+  return [
+  { key:"labour", title:"Labour sets the price", plate:"1817 · Ricardo publishes his <i>Principles</i>", tbl:tableLine(RIC),
+    idea:"Ricardo held that goods which can be freely reproduced exchange in proportion to the labour needed to make them. Rare statues or wines are the exception; anything more work can multiply follows labour. His trade example starts from that assumption: hours of work are the price.",
+    quote:"every increase of the quantity of labour must augment the value of that commodity", cite:"Ricardo, Principles",
+    table:RIC, type:"num", ans:80/90,
+    q:"In Portugal, cloth takes 90 hours and wine 80. If prices follow labour, how many units of <b>cloth</b> is 1 wine worth in Portugal?",
+    explain:"Price ratio = labour ratio. 80 ÷ 90 ≈ <b>0.89</b> cloth. Wine is the cheaper good in Portugal because it takes fewer hours.",
+    say:"Count the hours and you have the prices." },
+  { key:"absolute", title:"Better at everything", plate:"Ricardo's own numbers", tbl:tableLine(RIC),
+    idea:"In Ricardo's example, Portugal beats England at both goods. Common sense says England has nothing to sell. Ricardo was the first economist to argue consistently that this is wrong: trade can benefit both countries even when one is more efficient at everything. Because capital doesn't move freely between nations, he thought trade needed its own theory.",
+    quote:"", cite:"",
+    table:RIC, type:"num", ans:50,
+    q:"How many <b>fewer hours</b> does Portugal need to make one cloth <i>and</i> one wine than England does?",
+    explain:"England: 100 + 120 = 220 hours. Portugal: 90 + 80 = 170. Difference = <b>50</b>. Portugal has the <i>absolute</i> advantage in both goods. That still doesn't settle who should make what.",
+    say:"Being best at everything does not mean you should make everything." },
+  { key:"oc1", title:"What wine really costs England", plate:"A new market report", tbl:tableLine(t3),
+    idea:"What matters is the trade-off inside each country: making one more wine pulls workers off cloth. Ricardo compared the ratio of labour in the two goods; today this is called opportunity cost. Same math.",
+    quote:"", cite:"",
+    table:t3, type:"num", ans:t3.E.w/t3.E.c,
+    q:"In England, producing 1 extra <b>wine</b> means giving up how many units of <b>cloth</b>?",
+    explain:`One wine takes ${t3.E.w} hours. Those hours would have made ${t3.E.w} ÷ ${t3.E.c} = <b>${f2(t3.E.w/t3.E.c)}</b> cloth. That is England's real cost of a wine.`,
+    say:"The true price of wine is the cloth you did not make." },
+  { key:"oc2", title:"The other side of the trade-off", plate:"Another market report", tbl:tableLine(t4),
+    idea:"Every country faces the same trade-off in reverse. If wine costs a country little cloth, cloth must cost it a lot of wine. One country's cheap good is the mirror of its dear one.",
+    quote:"", cite:"",
+    table:t4, type:"num", ans:t4.P.c/t4.P.w,
+    q:"In Portugal, producing 1 extra <b>cloth</b> costs how many units of <b>wine</b>?",
+    explain:`One cloth takes ${t4.P.c} hours, enough for ${t4.P.c} ÷ ${t4.P.w} = <b>${f2(t4.P.c/t4.P.w)}</b> wine.`,
+    say:"Cheap in one good means dear in the other." },
+  { key:"comparative", title:"Comparative advantage", plate:"Who should make what?", tbl:tableLine(t5),
+    idea:"A country has a comparative advantage in the good whose relative labour cost is lower than abroad, even if it is absolutely worse at both. In Ricardo's table, England is slower at everything, yet a cloth costs it only 0.83 wine versus 1.12 in Portugal. So England makes cloth and Portugal makes wine.",
+    quote:"", cite:"",
+    table:t5, type:"choice", options:opts5, ans:c5,
+    q:"Using this table, what specialization lets both countries gain from trade?",
+    explain:`Price of 1 wine in cloth: England ${t5.E.w}÷${t5.E.c} = ${f2(wineP(t5,"E"))}, Portugal ${t5.P.w}÷${t5.P.c} = ${f2(wineP(t5,"P"))}. Wine is relatively cheaper in <b>${NAME[s5.W]}</b>, so ${NAME[s5.W]} makes wine and <b>${NAME[s5.C]}</b> makes cloth.${absBetter(t5)?` That holds even though ${NAME[absBetter(t5)]} is faster at both.`:""}`,
+    say:"Compare ratios, not hours." },
+  { key:"terms", title:"Terms of trade", plate:"Setting the exchange rate", tbl:tableLine(t6),
+    idea:"Each country trades only if it gets more than it could make at home. So the price of wine in cloth must fall <i>between</i> the two home ratios. In Ricardo's example, the home prices are 1.20 (England) and 0.88 (Portugal); at 1 cloth for 1 wine, both end up with more.",
+    quote:"", cite:"",
+    table:t6, type:"range", lo, hi, ans:T,
+    q:"Name a price for 1 <b>wine</b>, in units of <b>cloth</b>, at which <b>both</b> countries gain. (Decimals or fractions like 9/8 are fine.)",
+    explain:`At home, 1 wine costs ${f2(wineP(t6,"E"))} cloth in England and ${f2(wineP(t6,"P"))} in Portugal. Any price strictly <b>between ${f2(lo)} and ${f2(hi)}</b> works. Below that, the wine seller is better off at home; above it, the wine buyer is.`,
+    say:"Any price between the two home ratios leaves both nations richer." },
+  { key:"gainW", title:"Count the gain: the wine maker", plate:`Trading at 1 wine = ${f2(T)} cloth`, tbl:tableLine(t6),
+    idea:`Now trade happens at ${f2(T)} cloth per wine. ${NAME[W]} has the comparative advantage in wine. Instead of making a cloth itself, it puts those hours into wine and sells the wine. Does it come out ahead?`,
+    quote:"", cite:"",
+    table:t6, type:"num", ans:gainW,
+    q:`${NAME[W]} moves the ${t6[W].c} hours it used for 1 cloth into wine, then trades that wine for cloth at ${f2(T)} cloth per wine. How much <b>cloth</b> does it end up with?`,
+    explain:`${t6[W].c} hours ÷ ${t6[W].w} per wine = ${f2(t6[W].c/t6[W].w)} wine. × ${f2(T)} = <b>${f2(gainW)}</b> cloth, more than the 1 cloth it gave up making.`,
+    say:"Specialize, then trade, and you end with more than you gave up." },
+  { key:"gainC", title:"Count the gain: the cloth maker", plate:`Trading at 1 wine = ${f2(T)} cloth`, tbl:tableLine(t6),
+    idea:"Gains from trade are mutual. The cloth maker should also end with more than it gave up. This is the positive-sum heart of the theory. It's why this game grows the map for both players when both read the market right.",
+    quote:"increase the mass of commodities, and the sum of enjoyments", cite:"Ricardo, Principles",
+    table:t6, type:"num", ans:gainC,
+    q:`${NAME[C]} moves the ${t6[C].w} hours it used for 1 wine into cloth, then trades that cloth for wine at ${f2(T)} cloth per wine. How much <b>wine</b> does it end up with?`,
+    explain:`${t6[C].w} hours ÷ ${t6[C].c} per cloth = ${f2(t6[C].w/t6[C].c)} cloth. ÷ ${f2(T)} = <b>${f2(gainC)}</b> wine, also more than 1. <i>Both</i> countries gain. How the gain is split depends on the trade price.`,
+    say:"Both sides gain; the price only decides who gains more." },
+  { key:"corn", title:"The Corn Laws", plate:"1815 · Ricardo's <i>Essay</i> on the low price of corn", tbl:`Plots yield ${y1}, ${y2}, ${y3} quarters`,
+    idea:"Free trade was Ricardo's weapon against the Corn Laws, which banned grain imports. Without foreign corn, Britain had to farm ever-worse land. Rent on good land equals its surplus over the worst land in use, so rents rose and profits were squeezed. Cheap imported food was the escape.",
+    quote:"the interest of the landlord is always opposed to that of the consumer and manufacturer", cite:"Ricardo, Principles",
+    table:null, type:"num", ans:y1-y3,
+    q:`Protected England farms three plots that yield ${y1}, ${y2} and ${y3} quarters of corn with the same labour and capital. Once plot 3 is farmed, what <b>rent</b> does plot 1 pay?`,
+    explain:`Competition among farmers bids rent up until profit is equal everywhere. The worst plot pays no rent, so plot 1's rent = ${y1} − ${y3} = <b>${y1-y3}</b> quarters (plot 2 pays ${y2-y3}). Rent is never new wealth, only a slice taken from profit.`,
+    say:"Every acre of worse land you are forced to plough is a gift to the landlord." },
+  { key:"critique", title:"Whose “sum of enjoyments”?", plate:"1821 · Third edition of the <i>Principles</i>", tbl:"The textbook's verdict",
+    idea:"Hunt & Lautzenheiser push back. Ricardo's “sum of enjoyments” treats the existing distribution of wealth as natural. If only landlords and capitalists drink wine while workers lack warm clothes, imported wine raises the enjoyment of those with purchasing power, not necessarily of workers. Ricardo also admitted a mother country can gain by rigging trade with its colonies. Once power is unequal, the result is conflict, not harmony.",
+    quote:"", cite:"",
+    table:null, type:"choice", ans:"rich",
+    options:[{t:"Everyone gains equally",k:"eq"},{t:"Those with purchasing power: landlords and capitalists",k:"rich"},{t:"Laborers, through cheaper wine",k:"lab"},{t:"Nobody; trade is zero-sum",k:"zero"}],
+    q:"England imports cheap Portuguese wine. Workers can't afford wine and lack warm clothing. On the textbook's reading, who captures the gain?",
+    explain:"The gains go to <b>those with purchasing power</b>. Free trade grows the total, but the labour-theory view asks who gets it. The harmony story holds only if you take the distribution of property as fixed and fair.",
+    say:"Free commerce binds the nations together by one common tie of interest — or so I wrote." }
+  ];
+}
+
+/* ================= SCORING & WORLD ================= */
+function parseNum(s){if(s==null)return NaN;s=String(s).trim().replace(/,/g,"");if(!s)return NaN;
+  const m=s.match(/^(-?\d*\.?\d+)\s*\/\s*(\d*\.?\d+)$/);if(m)return parseFloat(m[1])/parseFloat(m[2]);
+  return /^-?\d*\.?\d+$/.test(s)?parseFloat(s):NaN}
+function score(q,a){
+  if(a==null||a==="")return 0;
+  if(q.type==="choice")return a===q.ans?1:0;
+  const x=parseNum(a);if(!isFinite(x))return 0;
+  if(q.type==="range"){
+    if(x>q.lo+0.005&&x<q.hi-0.005)return 1;
+    const w=q.hi-q.lo;
+    if(x>=q.lo-0.005&&x<=q.hi+0.005)return 0.6;
+    const d=x<q.lo?q.lo-x:x-q.hi;
+    return Math.max(0,0.5-0.5*d/w);
+  }
+  const rel=Math.abs(x-q.ans)/Math.max(Math.abs(q.ans),0.5);
+  if(rel<=0.03)return 1;
+  return Math.max(0,1-(rel-0.03)/0.3);
+}
+const tier=s=>s>=0.85?"spot":s>=0.5?"close":"off";
+const TIER_TXT={spot:"Spot on",close:"Close",off:"Way off"};
+
+function initOwner(){const o={};CELLS.forEach(c=>o[c.id]=c.home||null);return o}
+function pickClaim(owner,who){
+  const mine=CELLS.filter(c=>owner[c.id]===who);
+  const cand=CELLS.filter(c=>!owner[c.id]&&c.n.some(n=>owner[n.id]===who));
+  if(cand.length){cand.sort((a,b)=>b.n.filter(n=>owner[n.id]===who).length-a.n.filter(n=>owner[n.id]===who).length||a.id-b.id);return cand[0]}
+  // nearest free by BFS
+  const seen=new Set(mine.map(c=>c.id));let q=[...mine];
+  while(q.length){const nx=[];for(const c of q)for(const n of c.n){if(seen.has(n.id))continue;seen.add(n.id);if(!owner[n.id])return n;nx.push(n)}q=nx}
+  return CELLS.find(c=>!owner[c.id])||null;
+}
+function pickSeize(owner,who){
+  const vic=other(who);
+  const cand=CELLS.filter(c=>owner[c.id]===vic&&!c.cap&&c.n.some(n=>owner[n.id]===who));
+  if(!cand.length)return null;
+  cand.sort((a,b)=>b.n.filter(n=>owner[n.id]===who).length-a.n.filter(n=>owner[n.id]===who).length||a.id-b.id);
+  return cand[0];
+}
+function world(rounds,aE,aP,upto){
+  const owner=initOwner();const log=[];const army={};CELLS.forEach(c=>army[c.id]=c.home?3:0);
+  for(let i=0;i<upto;i++){
+    const q=rounds[i];const s={E:score(q,aE[i]),P:score(q,aP[i])};
+    const trade=s.E>=0.5&&s.P>=0.5;
+    const n={E:(s.E>=0.85?1:0)+(trade?1:0),P:(s.P>=0.85?1:0)+(trade?1:0)};
+    const first=s.E>s.P?"E":s.P>s.E?"P":(i%2?"P":"E");
+    const got={E:[],P:[]};let full=false;
+    for(let k=0;k<3;k++)for(const w of [first,other(first)]){if(n[w]>k){const c=pickClaim(owner,w);if(c){owner[c.id]=w;army[c.id]=0;got[w].push(c.id)}else full=true}}
+    let seized=null;
+    if(Math.abs(s.E-s.P)>=0.5){const w=s.E>s.P?"E":"P";const c=pickSeize(owner,w);if(c){owner[c.id]=w;army[c.id]=0;seized={by:w,id:c.id}}}
+    CELLS.forEach(c=>{if(owner[c.id])army[c.id]=Math.min(9,army[c.id]+1)});
+    log.push({s,trade,got,seized,full});
+  }
+  const count={E:0,P:0};CELLS.forEach(c=>{if(owner[c.id])count[owner[c.id]]++});
+  return {owner,log,count,army};
+}
+
+/* ================= STATE ================= */
+let S={view:"home",err:"",mode:null,role:null,code:null,seed:null,answers:{E:[],P:[]},ready:{E:0,P:0},local:{step:"E"},peer:null,partnerSeen:false};
+let ROUNDS=null; let lastViewKey=""; let lastMapKey="";
+const clientId=(()=>{try{let id=sessionStorage.getItem("ricardo-cid");if(!id){id=Math.random().toString(36).slice(2,10);sessionStorage.setItem("ricardo-cid",id)}return id}catch(e){return Math.random().toString(36).slice(2,10)}})();
+function save(){try{sessionStorage.setItem("ricardo-game",JSON.stringify({mode:S.mode,role:S.role,code:S.code,seed:S.seed,answers:S.answers,ready:S.ready,local:S.local,view:S.view}))}catch(e){}}
+function clearSave(){try{sessionStorage.removeItem("ricardo-game")}catch(e){}}
+
+/* ================= ONLINE (Supabase Realtime presence) ================= */
+let client=null, chan=null, joinedAt=0;
+function sbClient(){if(!client)client=SB.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);return client}
+function peers(){if(!chan)return[];const st=chan.presenceState();const out=[];for(const k in st){for(const m of st[k]){out.push({key:k,...m})}}return out}
+function myPayload(){return {role:S.role,t:joinedAt,answers:S.answers[S.role]||[],ready:S.ready[S.role]||0}}
+async function openChannel(code){
+  if(chan){try{await chan.untrack()}catch(e){}try{sbClient().removeChannel(chan)}catch(e){}chan=null}
+  chan=sbClient().channel("ricardo-"+code,{config:{presence:{key:clientId}}});
+  chan.on("presence",{event:"sync"},onSync);
+  return new Promise((res,rej)=>{let done=false;
+    chan.subscribe(st=>{if(st==="SUBSCRIBED"&&!done){done=true;res()}else if((st==="CHANNEL_ERROR"||st==="TIMED_OUT")&&!done){done=true;rej(new Error(st))}});
+    setTimeout(()=>{if(!done){done=true;rej(new Error("timeout"))}},8000)});
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function push(){if(chan&&S.role){chan.track(myPayload()).catch(()=>{})}save()}
+function roster(){ // earliest client per role wins
+  const ps=peers().filter(p=>p.role==="E"||p.role==="P");const by={};
+  ps.sort((a,b)=>(a.t||0)-(b.t||0));for(const p of ps){if(!by[p.role])by[p.role]=p}return by}
+function onSync(){
+  if(S.mode!=="online"||!S.role)return;
+  const by=roster();
+  const me=by[S.role];
+  if(me&&me.key!==clientId){S.view="full";S.role=null;try{chan.untrack()}catch(e){}clearSave();render();return}
+  const p=by[other(S.role)];
+  S.peer=p||null;
+  if(p){S.partnerSeen=true;S.answers[other(S.role)]=(p.answers||[]).slice();S.ready[other(S.role)]=p.ready||0;
+    if(S.view==="lobby"){S.view="game"}}
+  render();
+}
+function newCode(){const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789";let s="";for(let i=0;i<5;i++)s+=A[Math.floor(Math.random()*A.length)];return s}
+async function createOnline(){
+  S.err="";S.view="connecting";render();
+  try{
+    for(let tries=0;tries<5;tries++){
+      const code=newCode();await openChannel(code);await sleep(900);
+      if(peers().length===0){S.code=code;break}
+    }
+    if(!S.code)throw new Error("no code");
+    Object.assign(S,{mode:"online",role:"E",seed:S.code,answers:{E:[],P:[]},ready:{E:0,P:0},view:"lobby"});
+    joinedAt=Date.now();ROUNDS=buildRounds(S.seed);push();render();
+  }catch(e){S.view="home";S.err="Couldn't reach the online server. Try again, or play on one device.";render()}
+}
+async function joinOnline(code){
+  code=(code||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(code.length!==5){S.err="Codes are 5 characters.";render();return}
+  S.err="";S.view="connecting";render();
+  try{
+    await openChannel(code);
+    let by={};for(let i=0;i<16;i++){by=roster();if(by.E)break;await sleep(250)}
+    if(!by.E){S.view="join";S.err="No game found with that code.";render();return}
+    if(by.P&&by.P.key!==clientId){S.view="full";render();return}
+    Object.assign(S,{mode:"online",role:"P",code,seed:code,answers:{E:(by.E.answers||[]).slice(),P:[]},ready:{E:by.E.ready||0,P:0},view:"game",partnerSeen:true,peer:by.E});
+    joinedAt=Date.now();ROUNDS=buildRounds(S.seed);push();render();
+  }catch(e){S.view="join";S.err="Couldn't reach the online server.";render()}
+}
+async function resumeOnline(saved){
+  Object.assign(S,saved);ROUNDS=buildRounds(S.seed);S.view="connecting";render();
+  try{await openChannel(S.code);joinedAt=Date.now()-1e9; /* keep seniority on refresh */
+    S.view=S.answers.E.length||S.answers.P.length||S.role==="P"?"game":"lobby";push();render();
+  }catch(e){S.view="home";S.err="Couldn't reconnect.";render()}
+}
+function leave(){
+  if(chan){try{chan.untrack()}catch(e){}try{sbClient().removeChannel(chan)}catch(e){}chan=null}
+  clearSave();S={view:"home",err:"",mode:null,role:null,code:null,seed:null,answers:{E:[],P:[]},ready:{E:0,P:0},local:{step:"E"},peer:null,partnerSeen:false};
+  ROUNDS=null;lastViewKey="";render();
+}
+function startLocal(){
+  const seed="L"+Math.random().toString(36).slice(2,8);
+  Object.assign(S,{mode:"local",role:null,seed,answers:{E:[],P:[]},ready:{E:0,P:0},local:{step:"E"},view:"game"});
+  ROUNDS=buildRounds(seed);save();render();
+}
+
+/* ================= GAME PHASE ================= */
+function curRound(){return Math.min(S.ready.E||0,S.ready.P||0)}
+function phase(){
+  const r=curRound();if(r>=ROUNDS_N)return {r,ph:"end"};
+  const a=S.answers.E[r]!=null, b=S.answers.P[r]!=null;
+  if(a&&b)return {r,ph:"reveal"};
+  return {r,ph:"ask"};
+}
+function submit(val){
+  const {r}=phase();
+  if(S.mode==="local"){const who=S.local.step;S.answers[who][r]=val;S.local.step=who==="E"?"handoff":"E";save();render();return}
+  const a=S.answers[S.role];while(a.length<r)a.push(null);a[r]=val;push();render();
+}
+function nextRound(){
+  const {r}=phase();
+  if(S.mode==="local"){S.ready.E=S.ready.P=r+1;S.local.step="E";save();render();window.scrollTo({top:0,behavior:"smooth"});return}
+  S.ready[S.role]=r+1;push();render();window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ================= RENDER ================= */
+const $=id=>document.getElementById(id);
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function fmtAns(q,a){if(a==null)return "—";if(q.type==="choice"){const o=q.options.find(o=>o.k===a);return o?o.t:"—"}const x=parseNum(a);return isFinite(x)?esc(a)+(String(a).includes("/")?` (= ${f2(x)})`:""):esc(a)}
+function faceSVG(who){
+  if(who==="E")return `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="29" fill="#f6f2ea" stroke="#b23a2e" stroke-width="2"/><path d="M8 60 Q12 44 30 42 Q48 44 52 60Z" fill="#b23a2e"/><path d="M26 42 h8 l-4 8z" fill="#fff"/><ellipse cx="30" cy="30" rx="11" ry="12" fill="#e8c6a6"/><rect x="17" y="6" width="26" height="14" rx="2" fill="#1f1d24"/><rect x="13" y="18" width="34" height="4" rx="2" fill="#1f1d24"/><circle cx="26" cy="30" r="1.6" fill="#2a2320"/><circle cx="34" cy="30" r="1.6" fill="#2a2320"/><path d="M26 37 q4 2 8 0" stroke="#8a4a3a" stroke-width="1.5" fill="none"/></svg>`;
+  return `<svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="29" fill="#f6f2ea" stroke="#2f5f9e" stroke-width="2"/><path d="M8 60 Q12 44 30 42 Q48 44 52 60Z" fill="#2f5f9e"/><path d="M26 42 h8 l-4 8z" fill="#fff"/><ellipse cx="30" cy="31" rx="11" ry="12" fill="#d9b08c"/><path d="M10 20 Q30 4 50 20 Q30 14 10 20Z" fill="#1f1d24"/><circle cx="30" cy="12" r="2.5" fill="#d9b35a"/><path d="M20 26 q10 -6 20 0" stroke="#3b2a20" stroke-width="3" fill="none"/><circle cx="26" cy="31" r="1.6" fill="#2a2320"/><circle cx="34" cy="31" r="1.6" fill="#2a2320"/><path d="M25 37 q5 -2 10 0" stroke="#3b2a20" stroke-width="2" fill="none"/></svg>`;
+}
+function renderMap(W,highlight){
+  CELLS.forEach(c=>{const o=W.owner[c.id];
+    $("hx"+c.id).setAttribute("class","hex"+(highlight.has(c.id)?" new":""));
+    $("rg"+c.id).setAttribute("class","ring"+(o?" "+o:""));
+    const g=$("ar"+c.id);g.setAttribute("class","army "+(o||"N"));g.querySelector("text").textContent=o?(W.army[c.id]||1):"";
+  });
+}
+function renderBar(W,ph){
+  const inGame=ROUNDS&&(S.view==="game");
+  const need=w=>{if(!inGame||ph.ph==="end")return false;
+    if(ph.ph==="ask"){if(S.mode==="local")return S.local.step===w||(S.local.step==="handoff"&&w==="P");return S.answers[w][ph.r]==null}
+    return (S.ready[w]||0)<=ph.r};
+  const st=w=>{if(!inGame)return "Awaiting players";if(ph.ph==="end")return "Game over";
+    if(S.mode==="online"&&w!==S.role&&!S.peer)return S.partnerSeen?"Disconnected…":"Not joined yet";
+    if(ph.ph==="ask")return S.answers[w][ph.r]!=null?"Answer locked ✓":"Thinking…";
+    return (S.ready[w]||0)>ph.r?"Ready ✓":"Reviewing";};
+  const total=CELLS.length;const claimed=W.count.E+W.count.P;
+  const card=w=>`<div class="pcard ${w}${need(w)?" act":""}">${S.mode==="online"&&S.role===w?'<span class="you">▼ YOU</span>':(S.mode==="local"&&inGame&&ph.ph==="ask"&&S.local.step===w?'<span class="you">▼ YOUR TURN</span>':"")}${faceSVG(w)}<div><div class="nm">${NAME[w]}</div><div class="lands"><b>${W.count[w]}</b> markets</div><div class="st">${st(w)}</div></div></div>`;
+  $("bar").innerHTML=card("E")+`<div class="world">World trade<div class="bar"><i style="width:${Math.round(100*claimed/total)}%"></i></div><small>${claimed} of ${total} markets open</small></div>`+card("P");
+}
+function renderPlate(ph){
+  if(!ROUNDS||S.view!=="game"){$("plate").innerHTML=`<b>The Ricardo Trade Map</b><span>England vs. Portugal, c. 1817</span><span class="tbl">Ricardo's table: cloth 100/90 hrs, wine 120/80 hrs</span>`;return}
+  if(ph.ph==="end"){$("plate").innerHTML=`<b>Final map</b><span>after ${ROUNDS_N} turns</span>`;return}
+  const q=ROUNDS[ph.r];$("plate").innerHTML=`<b>Turn ${ph.r+1} / ${ROUNDS_N}</b><span>${q.plate}</span><span class="tbl">${q.tbl}</span>`;
+}
+function showRicardo(text,small){if(text){$("bubble").innerHTML=esc(text)+(small?`<small>${esc(small)}</small>`:"");$("ricardo").classList.add("show")}else $("ricardo").classList.remove("show")}
+
+function render(){
+  const ph=ROUNDS&&S.view==="game"?phase():{r:0,ph:"none"};
+  const revealedUpTo=ph.ph==="reveal"?ph.r+1:ph.ph==="end"?ROUNDS_N:ph.r;
+  const W=ROUNDS?world(ROUNDS,S.answers.E,S.answers.P,S.view==="game"?revealedUpTo:0):{owner:initOwner(),log:[],count:{E:3,P:3},army:Object.fromEntries(CELLS.map(c=>[c.id,c.home?3:0]))};
+  const mapKey=S.view+"|"+revealedUpTo;
+  const hl=new Set();
+  if(mapKey!==lastMapKey&&ph.ph==="reveal"){const L=W.log[ph.r];L.got.E.concat(L.got.P).forEach(i=>hl.add(i));if(L.seized)hl.add(L.seized.id)}
+  if(mapKey!==lastMapKey){renderMap(W,hl);lastMapKey=mapKey}
+  renderBar(W,ph);renderPlate(ph);
+  // victory
+  const v=$("victory");
+  if(ph.ph==="end"){const w=W.count.E>W.count.P?"E":W.count.P>W.count.E?"P":null;v.querySelector("b").textContent=w?NAME[w]+" wins":"A draw";v.querySelector("span").textContent=`${W.count.E} – ${W.count.P} markets · both nations grew`;v.classList.add("show")}else v.classList.remove("show");
+  // content (only rebuild when the view really changes, so typing isn't interrupted)
+  const key=[S.view,S.err,ph.ph,ph.r,S.local.step,S.mode==="online"&&S.role?S.answers[S.role][ph.r]!=null:"",S.mode==="online"&&S.role?(S.ready[S.role]||0):"",S.code,!!S.peer].join("|");
+  if(key===lastViewKey)return;lastViewKey=key;
+  const C=$("content");
+  if(S.view!=="game"||ph.ph!=="reveal")showRicardo(null);
+  if(S.view==="home")C.innerHTML=homeHTML();
+  else if(S.view==="join")C.innerHTML=joinHTML();
+  else if(S.view==="connecting")C.innerHTML=`<p class="waiting">Connecting…</p>`;
+  else if(S.view==="lobby")C.innerHTML=lobbyHTML();
+  else if(S.view==="full")C.innerHTML=`<h2>This game is full</h2><p>Two players are already in this room. Only they can play.</p><div class="row"><button class="primary" data-a="home">Back</button></div>`;
+  else if(ph.ph==="end")C.innerHTML=endHTML(W);
+  else if(ph.ph==="reveal"){C.innerHTML=revealHTML(ph.r,W);const L=W.log[ph.r];showRicardo(ROUNDS[ph.r].say,L.trade?"Both of you read the market. Both of you grew.":(L.s.E>=0.5||L.s.P>=0.5)?"Only one of you read it right. Trade needs two.":"Misread the ratios and the gains stay locked up.")}
+  else C.innerHTML=askHTML(ph.r);
+  const inp=C.querySelector("input.num");if(inp&&window.matchMedia("(min-width:700px)").matches)inp.focus({preventScroll:true});
+}
+
+function homeHTML(){
+  return `<p class="kicker">Build 2 · David Ricardo (1772–1823)</p><h2>The Ricardo Trade Map</h2>
+  <p>England and Portugal compete for the world's trading ports. Each round, both players answer the same comparative-advantage problem <i>at the same time</i>. The closer you get, the more you gain.</p>
+  <ul class="rules">
+   <li><b>Spot on</b> (within about 7%): you open a new market.</li>
+   <li><b>Both of you at least close</b> (within about 18%): trade happens and <i>both</i> nations gain another market. That's Ricardo's point: trade is positive-sum.</li>
+   <li><b>One far closer than the other:</b> the sharper trader also takes a border market from the rival.</li>
+   <li>Ten rounds. Each one teaches the next idea, from labour value to the textbook's critique. Most markets wins.</li>
+  </ul>
+  ${S.err?`<p class="err">${esc(S.err)}</p>`:""}
+  <div class="row">${ONLINE_OK?`<button class="primary" data-a="create">Create online game</button><button class="secondary" data-a="join">Join with a code</button>`:""}<button class="secondary" data-a="local">Play on one device</button></div>
+  ${ONLINE_OK?"":`<p class="hint">Online play isn't configured on this copy, so it's one-device only.</p>`}`;
+}
+function joinHTML(){return `<h2>Join a game</h2><p>Enter the 5-character code from the England player.</p><div class="row"><input class="code" id="code" maxlength="5" autocomplete="off" autocapitalize="characters" aria-label="Game code"><button class="primary" data-a="dojoin">Join as Portugal</button><button class="secondary" data-a="home">Back</button></div>${S.err?`<p class="err">${esc(S.err)}</p>`:""}`}
+function lobbyHTML(){return `<p class="kicker">You are England</p><h2>Share this code</h2><div class="bigcode">${S.code}</div><p>Your opponent opens this same site, taps <b>Join with a code</b>, and enters it. Only two players can be in a game.</p><p class="waiting">Waiting for Portugal…</p><div class="row"><button class="secondary" data-a="leave">Cancel</button></div>`}
+
+function askHTML(r){
+  const q=ROUNDS[r];
+  let who=S.mode==="online"?S.role:S.local.step;
+  if(S.mode==="local"&&who==="handoff")return `<p class="kicker">Turn ${r+1} of ${ROUNDS_N}</p><h2>Pass the device to Portugal</h2><p>England's answer is locked and hidden. Portugal, no peeking at the history: answer the same problem.</p><div class="row"><button class="primary" data-a="pstep">I'm Portugal, show the problem</button></div>`;
+  const locked=S.mode==="online"&&S.answers[S.role][r]!=null;
+  const lesson=`<div class="lesson"><h3>Intelligence ${r+1}: ${q.title}</h3><p>${q.idea}</p>${q.quote?`<p class="quote">“${q.quote}”</p><span class="cite">${q.cite}</span>`:""}</div>`;
+  let input="";
+  if(locked){input=`<p>Your answer: <b>${fmtAns(q,S.answers[S.role][r])}</b> (locked)</p><p class="waiting">${S.peer?`Waiting for ${NAME[other(S.role)]} to answer…`:`Waiting for ${NAME[other(S.role)]} to reconnect…`}</p>`}
+  else if(q.type==="choice"){input=`<div class="choices">${q.options.map(o=>`<button class="choice" data-a="choice" data-k="${o.k}">${o.t}</button>`).join("")}</div>`}
+  else input=`<div class="ans"><input class="num" id="ans" inputmode="decimal" autocomplete="off" placeholder="your answer" aria-label="Your answer"><button class="primary" data-a="submit">Lock in orders</button></div><p class="hint">Round to two decimals if you like. Fractions like 8/9 work.</p><p class="err" id="aerr"></p>`;
+  return `<p class="kicker">Turn ${r+1} of ${ROUNDS_N} · ${S.mode==="local"?`<b style="color:var(--${who==="E"?"eng":"por"})">${NAME[who]}</b> answering${who==="E"?" (Portugal, look away)":""}`:`You are <b style="color:var(--${S.role==="E"?"eng":"por"})">${NAME[S.role]}</b>`}</p>
+  ${lesson}<div class="problem">${q.table?labTable(q.table):""}<p>${q.q}</p>${input}</div>`;
+}
+function revealHTML(r,W){
+  const q=ROUNDS[r];const L=W.log[r];
+  const res=w=>`<div class="res ${w}"><b style="color:var(--${w==="E"?"eng":"por"})">${NAME[w]}</b><div class="big">${TIER_TXT[tier(L.s[w])]}</div><div>Answer: ${fmtAns(q,S.answers[w][r])}</div><div class="meter"><i style="width:${Math.round(L.s[w]*100)}%"></i></div><div class="hint">Accuracy ${Math.round(L.s[w]*100)}%</div></div>`;
+  const nm=id=>CELLS[id].name;
+  const parts=[];
+  if(L.trade)parts.push(`<b>Trade opens.</b> Both of you read the market, so both nations gain: ${["E","P"].map(w=>L.got[w].length?`${NAME[w]} opens ${L.got[w].map(nm).join(" and ")}`:"").filter(Boolean).join("; ")||"but every market is already open"}.`);
+  else{["E","P"].forEach(w=>{if(L.got[w].length)parts.push(`${NAME[w]} opens ${L.got[w].map(nm).join(" and ")} on its own, but with no trading partner there are no gains from trade.`)});if(!parts.length)parts.push("Nobody read the market right, so no trade and no new markets. Each nation makes everything itself (autarky).")}
+  if(L.seized)parts.push(`<b>${NAME[L.seized.by]}</b> outtrades its rival and takes <b>${nm(L.seized.id)}</b> from ${NAME[other(L.seized.by)]}.`);
+  let btn;
+  if(S.mode==="local")btn=`<button class="primary" data-a="next">${r+1<ROUNDS_N?"Next turn →":"See the final map →"}</button>`;
+  else if((S.ready[S.role]||0)>r)btn=`<p class="waiting">Waiting for ${NAME[other(S.role)]} to continue…</p>`;
+  else btn=`<button class="primary" data-a="next">${r+1<ROUNDS_N?"Next turn →":"See the final map →"}</button>`;
+  const cor=q.type==="choice"?q.options.find(o=>o.k===q.ans).t:q.type==="range"?`any value between ${f2(q.lo)} and ${f2(q.hi)}`:f2(q.ans);
+  return `<p class="kicker">Turn ${r+1} of ${ROUNDS_N} · battle report</p><h2>${q.title}</h2>
+  <div class="results">${res("E")}${res("P")}</div>
+  <p>Correct answer: <span class="correct">${cor}</span></p>
+  <div class="outcome">${parts.join(" ")}</div>
+  <div class="why"><h3>Why Ricardo says so</h3>${q.explain}</div>
+  <div class="row">${btn}</div>`;
+}
+function endHTML(W){
+  const trades=W.log.filter(l=>l.trade).length;
+  const w=W.count.E>W.count.P?"E":W.count.P>W.count.E?"P":null;
+  return `<p class="kicker">Game over</p><h2>${w?NAME[w]+" holds the most markets":"Dead even"}</h2>
+  <p>England grew from 3 to <b>${W.count.E}</b> markets; Portugal from 3 to <b>${W.count.P}</b>. In <b>${trades}</b> of ${ROUNDS_N} rounds both of you read the market right, and each of those rounds made <i>both</i> nations bigger. That's comparative advantage: specialization plus exchange is positive-sum, even for the country that's worse at everything.</p>
+  <div class="why"><h3>The catch (Hunt &amp; Lautzenheiser)</h3>Ricardo used this theory against the landlords and the Corn Laws. His “sum of enjoyments,” though, quietly assumes the existing distribution of wealth is natural. Gains flow to whoever has purchasing power. He even admitted that a mother country could profit by rigging trade with its colonies. Once power is unequal, the harmony of free trade gives way to the conflict that runs through the rest of his <i>Principles</i>.</div>
+  <div class="row"><button class="primary" data-a="again">${S.mode==="local"?"Play again":"Back to start"}</button></div>`;
+}
+
+/* ================= EVENTS ================= */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-a]");if(!b)return;const a=b.dataset.a;
+  if(a==="create")createOnline();
+  else if(a==="join"){S.view="join";S.err="";render();setTimeout(()=>{const c=$("code");c&&c.focus()},50)}
+  else if(a==="dojoin")joinOnline($("code").value);
+  else if(a==="local")startLocal();
+  else if(a==="home"||a==="leave"||a==="again"){leave()}
+  else if(a==="pstep"){S.local.step="P";save();render()}
+  else if(a==="choice"){[...document.querySelectorAll(".choice")].forEach(x=>{x.disabled=true;x.classList.toggle("picked",x===b)});setTimeout(()=>submit(b.dataset.k),250)}
+  else if(a==="submit"){const v=$("ans").value;if(!isFinite(parseNum(v))){$("aerr").textContent="Enter a number, like 0.89 or 8/9.";return}submit(v.trim())}
+  else if(a==="next")nextRound();
+});
+document.addEventListener("keydown",e=>{
+  if(e.key!=="Enter")return;
+  if(e.target.id==="ans"){e.preventDefault();document.querySelector('[data-a="submit"]').click()}
+  if(e.target.id==="code"){e.preventDefault();joinOnline(e.target.value)}
+});
+window.addEventListener("pagehide",()=>{if(chan){try{chan.untrack()}catch(e){}}});
+
+/* ================= BOOT ================= */
+drawMap();
+(function boot(){
+  let saved=null;try{saved=JSON.parse(sessionStorage.getItem("ricardo-game")||"null")}catch(e){}
+  if(saved&&saved.mode==="local"&&saved.seed){Object.assign(S,saved);S.view="game";ROUNDS=buildRounds(S.seed);render();return}
+  if(saved&&saved.mode==="online"&&saved.code&&ONLINE_OK){resumeOnline(saved);return}
+  render();
+})();
+// test hook
+window.__ricardo={S,buildRounds,world,score,CELLS};
+</script>
+</body>
+</html>
